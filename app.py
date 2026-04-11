@@ -1,79 +1,94 @@
 import streamlit as st
-import requests
+import sqlite3
+from auth import criar_tabelas, cadastrar, login
 
-API_URL = "https://SEU-BACKEND.onrender.com"
+st.set_page_config(page_title="Agro SaaS Pro", layout="wide")
 
-if "user_id" not in st.session_state:
-    st.session_state.user_id = None
+criar_tabelas()
 
-# ======================
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+menu = ["Login", "Cadastrar"]
+choice = st.sidebar.selectbox("Menu", menu)
+
+# CADASTRO
+if choice == "Cadastrar":
+    st.title("Criar Conta")
+    user = st.text_input("Usuário")
+    password = st.text_input("Senha", type="password")
+
+    if st.button("Cadastrar"):
+        if cadastrar(user, password):
+            st.success("Conta criada!")
+        else:
+            st.error("Usuário já existe")
+
 # LOGIN
-# ======================
-if not st.session_state.user_id:
+elif choice == "Login":
+    st.title("Login")
+    user = st.text_input("Usuário")
+    password = st.text_input("Senha", type="password")
 
-    st.title("🌱 Agro SaaS")
+    if st.button("Entrar"):
+        if login(user, password):
+            st.session_state.user = user
+            st.success("Login realizado!")
+        else:
+            st.error("Erro no login")
 
-    aba = st.radio("Acesso", ["Login", "Cadastro"])
+# SISTEMA LOGADO
+if st.session_state.user:
+    st.sidebar.success(f"Usuário: {st.session_state.user}")
 
-    if aba == "Cadastro":
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+    menu2 = ["Dashboard", "Fazendas", "Talhões", "NDVI"]
+    escolha = st.sidebar.selectbox("Sistema", menu2)
 
-        if st.button("Cadastrar"):
-            requests.post(f"{API_URL}/register", params={"usuario": u, "senha": s})
-            st.success("Criado")
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
 
-    if aba == "Login":
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
+    # DASHBOARD
+    if escolha == "Dashboard":
+        st.title("📊 Dashboard")
+        fazendas = c.execute("SELECT COUNT(*) FROM fazendas WHERE user=?", (st.session_state.user,)).fetchone()[0]
+        talhoes = c.execute("SELECT COUNT(*) FROM talhoes WHERE user=?", (st.session_state.user,)).fetchone()[0]
 
-        if st.button("Entrar"):
-            r = requests.post(f"{API_URL}/login", params={"usuario": u, "senha": s})
-            if r.status_code == 200:
-                st.session_state.user_id = r.json()["user_id"]
-                st.rerun()
-            else:
-                st.error("Erro login")
+        col1, col2 = st.columns(2)
+        col1.metric("Fazendas", fazendas)
+        col2.metric("Talhões", talhoes)
 
-# ======================
-# APP
-# ======================
-else:
+    # FAZENDAS
+    if escolha == "Fazendas":
+        st.title("🌾 Fazendas")
+        nome = st.text_input("Nome da Fazenda")
 
-    st.sidebar.button("Sair", on_click=lambda: st.session_state.update(user_id=None))
+        if st.button("Salvar Fazenda"):
+            c.execute("INSERT INTO fazendas (nome, user) VALUES (?,?)", (nome, st.session_state.user))
+            conn.commit()
+            st.success("Salvo!")
 
-    menu = st.sidebar.radio("Menu", ["Fazendas", "Talhões"])
+        for row in c.execute("SELECT * FROM fazendas WHERE user=?", (st.session_state.user,)):
+            st.write(row)
 
-    if menu == "Fazendas":
+    # TALHÕES
+    if escolha == "Talhões":
+        st.title("📍 Talhões")
+        nome = st.text_input("Nome do Talhão")
 
-        nome = st.text_input("Nome fazenda")
+        if st.button("Salvar Talhão"):
+            c.execute("INSERT INTO talhoes (nome, user) VALUES (?,?)", (nome, st.session_state.user))
+            conn.commit()
+            st.success("Salvo!")
 
-        if st.button("Salvar"):
-            requests.post(f"{API_URL}/fazenda",
-                          params={"nome": nome, "user_id": st.session_state.user_id})
+        for row in c.execute("SELECT * FROM talhoes WHERE user=?", (st.session_state.user,)):
+            st.write(row)
 
-        dados = requests.get(f"{API_URL}/fazendas/{st.session_state.user_id}").json()
+    # NDVI
+    if escolha == "NDVI":
+        st.title("🛰️ NDVI")
+        file = st.file_uploader("Enviar imagem NDVI")
 
-        for f in dados:
-            st.write("🌾", f["nome"])
+        if file:
+            st.image(file, caption="Imagem NDVI")
 
-    elif menu == "Talhões":
-
-        fazendas = requests.get(f"{API_URL}/fazendas/{st.session_state.user_id}").json()
-
-        nomes = [f["nome"] for f in fazendas]
-        escolha = st.selectbox("Fazenda", nomes)
-
-        fid = [f["id"] for f in fazendas if f["nome"] == escolha][0]
-
-        nome = st.text_input("Talhão")
-        area = st.number_input("Área")
-
-        if st.button("Salvar"):
-            requests.post(f"{API_URL}/talhao",
-                          params={"nome": nome, "area": area, "fazenda_id": fid})
-
-        dados = requests.get(f"{API_URL}/talhoes/{fid}").json()
-
-        for t in dados:
-            st.write("📍", t["nome"], "-", t["area"], "ha")
+    conn.close()
