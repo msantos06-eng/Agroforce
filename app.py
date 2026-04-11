@@ -86,6 +86,12 @@ with tab2:
             st.success("Conta criada")
         else:
             st.error("Erro ao cadastrar")
+
+    if st.button("Cadastrar"):
+        if register(reg_email, reg_password):
+            st.success("Conta criada")
+        else:
+            st.error("Erro ao cadastrar")
      Senha", type="password")
         if st.button("Cadastrar"):
             if register(email, password):
