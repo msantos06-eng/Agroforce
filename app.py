@@ -1,5 +1,5 @@
 # ======================================
-# AGRO SAAS ENTERPRISE (NÍVEL EMPRESA)
+# AGRO SAAS ENTERPRISE (VERSÃO ESTÁVEL)
 # ======================================
 
 import streamlit as st
@@ -23,7 +23,7 @@ def get_conn():
 conn = get_conn()
 c = conn.cursor()
 
-c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, plan TEXT, stripe_id TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, plan TEXT)")
 c.execute("CREATE TABLE IF NOT EXISTS farms (id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT)")
 c.execute("CREATE TABLE IF NOT EXISTS fields (id INTEGER PRIMARY KEY, farm_id INTEGER, name TEXT)")
 c.execute("CREATE TABLE IF NOT EXISTS ndvi (id INTEGER PRIMARY KEY, user_id INTEGER, value REAL, date TEXT)")
@@ -36,15 +36,14 @@ conn.commit()
 def hash_password(p):
     return hashlib.sha256(p.encode()).hexdigest()
 
-
 def login(email, password):
     c.execute("SELECT * FROM users WHERE email=? AND password=?", (email, hash_password(password)))
     return c.fetchone()
 
-
 def register(email, password):
     try:
-        c.execute("INSERT INTO users (email, password, plan) VALUES (?, ?, 'Free')", (email, hash_password(password)))
+        c.execute("INSERT INTO users (email, password, plan) VALUES (?, ?, 'Free')",
+                  (email, hash_password(password)))
         conn.commit()
         return True
     except:
@@ -57,64 +56,52 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 # =========================
+# LOGIN / CADASTRO
+# =========================
+if st.session_state.user is None:
 
+    tab1, tab2 = st.tabs(["Login", "Cadastro"])
 
-# CADASTRO
-with tab2:
-    reg_email = st.text_input("Novo Email", key="reg_email")
-    reg_password = st.text_input("Nova Senha", type="password", key="reg_pass")
-
-    if st.button("Cadastrar"):
-        if register(reg_email, reg_password):
-            st.success("Conta criada")
-        else:
-            st.error("Erro ao cadastrar")
-
-    if st.button("Cadastrar"):
-        if register(reg_email, reg_password):
-            st.success("Conta criada")
-        else:
-            st.error("Erro ao cadastrar")
-     Senha", type="password")
-        if st.button("Cadastrar"):
-            if register(email, password):
-                st.success("Conta criada")
     # LOGIN
     with tab1:
-    login_email = st.text_input("Email", key="login_email")
-    login_password = st.text_input("Senha", type="password", key="login_pass")
+        login_email = st.text_input("Email", key="login_email")
+        login_password = st.text_input("Senha", type="password", key="login_pass")
 
-    if st.button("Entrar"):
-        user = login(login_email, login_password)
-        if user:
-            st.session_state.user = user
-            st.rerun()
-        else:
-            st.error("Erro no login")
+        if st.button("Entrar"):
+            user = login(login_email, login_password)
+            if user:
+                st.session_state.user = user
+                st.rerun()
+            else:
+                st.error("Erro no login")
 
-# CADASTRO
+    # CADASTRO
     with tab2:
-    reg_email = st.text_input("Novo Email", key="reg_email")
-    reg_password = st.text_input("Nova       Senha", type="password", key="reg_pass")
+        reg_email = st.text_input("Novo Email", key="reg_email")
+        reg_password = st.text_input("Nova Senha", type="password", key="reg_pass")
 
-    if st.button("Cadastrar"):
-        if register(reg_email, reg_password):
-            st.success("Conta criada")
-        else:
-            st.error("Erro ao cadastrar")
+        if st.button("Cadastrar"):
+            if register(reg_email, reg_password):
+                st.success("Conta criada")
+            else:
+                st.error("Email já existe")
+
 # =========================
-# APP
+# APP (LOGADO)
 # =========================
 else:
     user = st.session_state.user
     user_id = user[0]
     plan = user[3]
 
-    st.sidebar.title("🌾 Agro SaaS Enterprise")
+    st.sidebar.title("🌾 Agro SaaS")
     st.sidebar.markdown(f"Plano: **{plan}**")
 
-    menu = st.sidebar.radio("Menu", ["Dashboard", "NDVI", "Fazendas", "Talhões", "Assinatura", "Admin", "Logout"])
+    menu = st.sidebar.radio("Menu",
+        ["Dashboard", "NDVI", "Fazendas", "Talhões", "Assinatura", "Admin", "Logout"]
+    )
 
+    # LOGOUT
     if menu == "Logout":
         st.session_state.user = None
         st.rerun()
@@ -123,7 +110,7 @@ else:
     # DASHBOARD
     # =========================
     if menu == "Dashboard":
-        st.title("📊 Analytics SaaS")
+        st.title("📊 Dashboard")
 
         farms = pd.read_sql_query("SELECT COUNT(*) as total FROM farms WHERE user_id=?", conn, params=(user_id,))
         fields = pd.read_sql_query("SELECT COUNT(*) as total FROM fields WHERE farm_id IN (SELECT id FROM farms WHERE user_id=?)", conn, params=(user_id,))
@@ -132,7 +119,7 @@ else:
         col1, col2, col3 = st.columns(3)
         col1.metric("Fazendas", int(farms['total'][0]))
         col2.metric("Talhões", int(fields['total'][0]))
-        col3.metric("NDVI Médio", round(ndvi['avg'][0],2) if ndvi['avg'][0] else 0)
+        col3.metric("NDVI Médio", round(ndvi['avg'][0], 2) if ndvi['avg'][0] else 0)
 
         df = pd.read_sql_query("SELECT date, value FROM ndvi WHERE user_id=?", conn, params=(user_id,))
         if not df.empty:
@@ -143,26 +130,61 @@ else:
     # NDVI
     # =========================
     elif menu == "NDVI":
-        st.title("🛰️ NDVI Inteligente")
+        st.title("🛰️ NDVI")
 
         if plan == "Free":
             st.warning("Plano Free limitado")
 
         value = st.slider("NDVI", 0.0, 1.0, 0.6)
-        if st.button("Salvar"):
-            c.execute("INSERT INTO ndvi (user_id, value, date) VALUES (?, ?, ?)", (user_id, value, str(datetime.date.today())))
+
+        if st.button("Salvar NDVI"):
+            c.execute("INSERT INTO ndvi (user_id, value, date) VALUES (?, ?, ?)",
+                      (user_id, value, str(datetime.date.today())))
             conn.commit()
+            st.success("Salvo com sucesso")
 
     # =========================
-    # SUBSCRIPTION
+    # FAZENDAS
+    # =========================
+    elif menu == "Fazendas":
+        st.title("🌾 Fazendas")
+
+        name = st.text_input("Nome da Fazenda")
+        if st.button("Adicionar Fazenda"):
+            c.execute("INSERT INTO farms (user_id, name) VALUES (?, ?)", (user_id, name))
+            conn.commit()
+
+        df = pd.read_sql_query("SELECT * FROM farms WHERE user_id=?", conn, params=(user_id,))
+        st.dataframe(df)
+
+    # =========================
+    # TALHÕES
+    # =========================
+    elif menu == "Talhões":
+        st.title("📍 Talhões")
+
+        farms = pd.read_sql_query("SELECT * FROM farms WHERE user_id=?", conn, params=(user_id,))
+        if not farms.empty:
+            farm_id = st.selectbox("Fazenda", farms["id"])
+            name = st.text_input("Nome do Talhão")
+
+            if st.button("Adicionar Talhão"):
+                c.execute("INSERT INTO fields (farm_id, name) VALUES (?, ?)", (farm_id, name))
+                conn.commit()
+
+        df = pd.read_sql_query("SELECT * FROM fields", conn)
+        st.dataframe(df)
+
+    # =========================
+    # ASSINATURA
     # =========================
     elif menu == "Assinatura":
-        st.title("💳 Gestão de Assinatura")
+        st.title("💳 Assinatura")
 
         sub = pd.read_sql_query("SELECT * FROM subscriptions WHERE user_id=?", conn, params=(user_id,))
 
         if sub.empty:
-            st.info("Sem assinatura ativa")
+            st.info("Sem assinatura")
         else:
             st.dataframe(sub)
 
@@ -171,13 +193,13 @@ else:
             c.execute("INSERT INTO subscriptions (user_id, status, plan, renew_date) VALUES (?, 'active', ?, ?)",
                       (user_id, plan, next_date))
             conn.commit()
-            st.success("Assinatura atualizada")
+            st.success("Atualizado")
 
     # =========================
     # ADMIN
     # =========================
     elif menu == "Admin":
-        st.title("👨‍💼 Painel Admin")
+        st.title("👨‍💼 Admin")
 
         users = pd.read_sql_query("SELECT id, email, plan FROM users", conn)
         st.dataframe(users)
@@ -185,7 +207,6 @@ else:
         subs = pd.read_sql_query("SELECT * FROM subscriptions", conn)
         st.dataframe(subs)
 
-        st.subheader("📊 Receita estimada")
         revenue = len(subs) * 49
         st.metric("MRR (R$)", revenue)
 
@@ -193,4 +214,4 @@ else:
 # FOOTER
 # =========================
 st.markdown("---")
-st.caption("Agro SaaS Enterprise • Plataforma Escalável 🚀")
+st.caption("Agro SaaS Enterprise • Plataforma SaaS 🚀")
