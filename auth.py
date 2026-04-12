@@ -1,34 +1,31 @@
-import sqlite3
+import hashlib
+from database import conectar
 
-def criar_tabelas():
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-
-    c.execute("CREATE TABLE IF NOT EXISTS users (user TEXT, password TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS fazendas (nome TEXT, user TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS talhoes (nome TEXT, user TEXT)")
-
-    conn.commit()
-    conn.close()
+def hash_senha(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def cadastrar(user, password):
-    conn = sqlite3.connect("database.db")
+    conn = conectar()
     c = conn.cursor()
 
-    c.execute("SELECT * FROM users WHERE user=?", (user,))
-    if c.fetchone():
-        return False
+    senha_hash = hash_senha(password)
 
-    c.execute("INSERT INTO users VALUES (?,?)", (user, password))
-    conn.commit()
-    conn.close()
-    return True
+    try:
+        c.execute("INSERT INTO users (user, password) VALUES (?,?)", (user, senha_hash))
+        conn.commit()
+        return True
+    except:
+        return False
+    finally:
+        conn.close()
 
 def login(user, password):
-    conn = sqlite3.connect("database.db")
+    conn = conectar()
     c = conn.cursor()
 
-    c.execute("SELECT * FROM users WHERE user=? AND password=?", (user, password))
+    senha_hash = hash_senha(password)
+
+    c.execute("SELECT * FROM users WHERE user=? AND password=?", (user, senha_hash))
     result = c.fetchone()
 
     conn.close()

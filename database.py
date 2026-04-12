@@ -1,10 +1,35 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-import os
+import sqlite3
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def conectar():
+    return sqlite3.connect("database.db", check_same_thread=False)
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+def criar_tabelas():
+    conn = conectar()
+    c = conn.cursor()
 
-Base = declarative_base()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user TEXT UNIQUE,
+            password TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS fazendas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            user TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS talhoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT,
+            user TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()

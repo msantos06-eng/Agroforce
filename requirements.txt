@@ -3,13 +3,6 @@ pandas
 numpy
 folium
 streamlit-folium
-shapely
-geopandas
-pyproj
-fiona
-rasterio
 requests
 Pillow
-scikit-learn
 plotly
-opencv-python-headless

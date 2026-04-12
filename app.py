@@ -1,3 +1,6 @@
+from auth import criar_tabelas
+
+criar_tabelas()
 st.write("INICIOU")
 import streamlit as st
 import sqlite3
