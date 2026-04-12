@@ -23,7 +23,7 @@ conn = sqlite3.connect("database.db", check_same_thread=False)
 c = conn.cursor()
 
 c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
     conn.commit()
     c.execute("""
 CREATE TABLE IF NOT EXISTS fazendas (
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS fazendas (
 nome_fazenda = st.sidebar.text_input("Nome da fazenda")
 
     if st.sidebar.button("Criar Fazenda"):
-    c.execute("INSERT INTO fazendas (usuario_id, nome) VALUES (?, ?)",
+c.execute("INSERT INTO fazendas (usuario_id, nome) VALUES (?, ?)",
               (st.session_state["user_id"], nome_fazenda))
     conn.commit()
     st.sidebar.success("Fazenda criada")
@@ -148,7 +148,7 @@ senha = st.sidebar.text_input("Senha",                type="password")
 
     if st.sidebar.button("Cadastrar"):
     senha_hash = hash_senha(senha)
-    c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
+c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
     conn.commit()
     st.success("Usuário criado!")
 
