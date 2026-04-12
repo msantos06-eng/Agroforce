@@ -1,217 +1,216 @@
-# ======================================
-# AGRO SAAS ENTERPRISE (VERSÃO ESTÁVEL)
-# ======================================
-
 import streamlit as st
 import sqlite3
 import hashlib
-import pandas as pd
-import plotly.express as px
-import datetime
+from streamlit_folium import st_folium
+import folium
+from folium.plugins import Draw
+import numpy as np
+import geopandas as gpd
+from shapely.geometry import shape
+import rasterio
+import tempfile
+import os
+import zipfile
+import requests
+import json
+
+st.set_page_config(layout="wide")
 
 # =========================
-# CONFIG
+# DB
 # =========================
-st.set_page_config(page_title="Agro SaaS Enterprise", layout="wide")
-
-# =========================
-# DATABASE
-# =========================
-def get_conn():
-    return sqlite3.connect("agro.db", check_same_thread=False)
-
-conn = get_conn()
+conn = sqlite3.connect("database.db", check_same_thread=False)
 c = conn.cursor()
 
-c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, plan TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS farms (id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS fields (id INTEGER PRIMARY KEY, farm_id INTEGER, name TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS ndvi (id INTEGER PRIMARY KEY, user_id INTEGER, value REAL, date TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS subscriptions (id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, plan TEXT, renew_date TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
 conn.commit()
 
 # =========================
-# AUTH
+# FUNÇÕES
 # =========================
-def hash_password(p):
-    return hashlib.sha256(p.encode()).hexdigest()
+def hash_senha(s):
+    return hashlib.sha256(s.encode()).hexdigest()
 
-def login(email, password):
-    c.execute("SELECT * FROM users WHERE email=? AND password=?", (email, hash_password(password)))
-    return c.fetchone()
+def gerar_taxa(ndvi):
+    if ndvi < 0.3:
+        return 150
+        import requests
 
-def register(email, password):
-    try:
-        c.execute("INSERT INTO users (email, password, plan) VALUES (?, ?, 'Free')",
-                  (email, hash_password(password)))
-        conn.commit()
-        return True
-    except:
-        return False
+def get_token():
+    url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": "SEU_CLIENT_ID",
+        "client_secret": "SEU_CLIENT_SECRET"
+    }
+
+    r = requests.post(url, data=data)
+    return r.json()["access_token"]
+    def buscar_ndvi_satellite(geojson):
+    token = get_token()
+
+    url = "https://sh.dataspace.copernicus.eu/api/v1/process"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "input": {
+            "bounds": {
+                "geometry": geojson
+            },
+            "data": [{
+                "type": "sentinel-2-l2a"
+            }]
+        },
+        "evalscript": """
+        return [ (B08 - B04) / (B08 + B04) ];
+        """,
+        "output": {
+            "width": 512,
+            "height": 512
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=body)
+    return response.content
+    elif ndvi < 0.6:
+        return 120
+    else:
+        return 80
 
 # =========================
-# SESSION
+# LOGIN
 # =========================
-if "user" not in st.session_state:
-    st.session_state.user = None
+st.sidebar.title("Login")
 
-# =========================
-# LOGIN / CADASTRO
-# =========================
-if st.session_state.user is None:
+email = st.sidebar.text_input("Email")
+senha = st.sidebar.text_input("Senha", type="password")
 
-    tab1, tab2 = st.tabs(["Login", "Cadastro"])
+if st.sidebar.button("Entrar"):
+    senha_hash = hash_senha(senha)
+    c.execute("SELECT * FROM usuarios WHERE email=? AND senha=?", (email, senha_hash))
+    user = c.fetchone()
 
-    # LOGIN
-    with tab1:
-        login_email = st.text_input("Email", key="login_email")
-        login_password = st.text_input("Senha", type="password", key="login_pass")
+    if user:
+        st.session_state["user_id"] = user[0]
+        st.success("Logado!")
+    else:
+        st.error("Erro login")
 
-        if st.button("Entrar"):
-            user = login(login_email, login_password)
-            if user:
-                st.session_state.user = user
-                st.rerun()
-            else:
-                st.error("Erro no login")
-
-    # CADASTRO
-    with tab2:
-        reg_email = st.text_input("Novo Email", key="reg_email")
-        reg_password = st.text_input("Nova Senha", type="password", key="reg_pass")
-
-        if st.button("Cadastrar"):
-            if register(reg_email, reg_password):
-                st.success("Conta criada")
-            else:
-                st.error("Email já existe")
+if st.sidebar.button("Cadastrar"):
+    senha_hash = hash_senha(senha)
+    c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
+    conn.commit()
+    st.success("Usuário criado!")
 
 # =========================
-# APP (LOGADO)
+# MENU
 # =========================
-else:
-    user = st.session_state.user
-    user_id = user[0]
-    plan = user[3]
+menu = st.sidebar.radio("Menu", [
+    "Mapa",
+    "NDVI",
+    "NDVI Satélite",
+    "Exportar"
+])
+if menu == "NDVI Satélite":
 
-    st.sidebar.title("🌾 Agro SaaS")
-    st.sidebar.markdown(f"Plano: **{plan}**")
+    if "talhao" not in st.session_state:
+        st.warning("Desenhe um talhão primeiro")
+    else:
+        st.info("Buscando satélite...")
 
-    menu = st.sidebar.radio("Menu",
-        ["Dashboard", "NDVI", "Fazendas", "Talhões", "Assinatura", "Admin", "Logout"]
-    )
+        geo = st.session_state["talhao"]["geometry"]
 
-    # LOGOUT
-    if menu == "Logout":
-        st.session_state.user = None
-        st.rerun()
+        img_bytes = buscar_ndvi_satellite(geo)
 
-    # =========================
-    # DASHBOARD
-    # =========================
-    if menu == "Dashboard":
-        st.title("📊 Dashboard")
+        from PIL import Image
+        import io
 
-        farms = pd.read_sql_query("SELECT COUNT(*) as total FROM farms WHERE user_id=?", conn, params=(user_id,))
-        fields = pd.read_sql_query("SELECT COUNT(*) as total FROM fields WHERE farm_id IN (SELECT id FROM farms WHERE user_id=?)", conn, params=(user_id,))
-        ndvi = pd.read_sql_query("SELECT AVG(value) as avg FROM ndvi WHERE user_id=?", conn, params=(user_id,))
+        imagem = Image.open(io.BytesIO(img_bytes))
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Fazendas", int(farms['total'][0]))
-        col2.metric("Talhões", int(fields['total'][0]))
-        col3.metric("NDVI Médio", round(ndvi['avg'][0], 2) if ndvi['avg'][0] else 0)
+        st.image(imagem, caption="NDVI Satélite")
 
-        df = pd.read_sql_query("SELECT date, value FROM ndvi WHERE user_id=?", conn, params=(user_id,))
-        if not df.empty:
-            fig = px.line(df, x="date", y="value", title="NDVI ao longo do tempo")
-            st.plotly_chart(fig, use_container_width=True)
+# =========================
+# MAPA
+# =========================
+if menu == "Mapa":
+    mapa = folium.Map(location=[-12.5, -45.0], zoom_start=13)
 
-    # =========================
-    # NDVI
-    # =========================
-    elif menu == "NDVI":
-        st.title("🛰️ NDVI")
+    Draw(export=True).add_to(mapa)
 
-        if plan == "Free":
-            st.warning("Plano Free limitado")
+    map_data = st_folium(mapa)
 
-        value = st.slider("NDVI", 0.0, 1.0, 0.6)
+    if map_data and map_data.get("last_active_drawing"):
+        geojson = map_data["last_active_drawing"]
 
-        if st.button("Salvar NDVI"):
-            c.execute("INSERT INTO ndvi (user_id, value, date) VALUES (?, ?, ?)",
-                      (user_id, value, str(datetime.date.today())))
+        if "user_id" in st.session_state:
+            c.execute("INSERT INTO talhoes (usuario_id, geojson) VALUES (?,?)",
+                      (st.session_state["user_id"], str(geojson)))
             conn.commit()
-            st.success("Salvo com sucesso")
-
-    # =========================
-    # FAZENDAS
-    # =========================
-    elif menu == "Fazendas":
-        st.title("🌾 Fazendas")
-
-        name = st.text_input("Nome da Fazenda")
-        if st.button("Adicionar Fazenda"):
-            c.execute("INSERT INTO farms (user_id, name) VALUES (?, ?)", (user_id, name))
-            conn.commit()
-
-        df = pd.read_sql_query("SELECT * FROM farms WHERE user_id=?", conn, params=(user_id,))
-        st.dataframe(df)
-
-    # =========================
-    # TALHÕES
-    # =========================
-    elif menu == "Talhões":
-        st.title("📍 Talhões")
-
-        farms = pd.read_sql_query("SELECT * FROM farms WHERE user_id=?", conn, params=(user_id,))
-        if not farms.empty:
-            farm_id = st.selectbox("Fazenda", farms["id"])
-            name = st.text_input("Nome do Talhão")
-
-            if st.button("Adicionar Talhão"):
-                c.execute("INSERT INTO fields (farm_id, name) VALUES (?, ?)", (farm_id, name))
-                conn.commit()
-
-        df = pd.read_sql_query("SELECT * FROM fields", conn)
-        st.dataframe(df)
-
-    # =========================
-    # ASSINATURA
-    # =========================
-    elif menu == "Assinatura":
-        st.title("💳 Assinatura")
-
-        sub = pd.read_sql_query("SELECT * FROM subscriptions WHERE user_id=?", conn, params=(user_id,))
-
-        if sub.empty:
-            st.info("Sem assinatura")
-        else:
-            st.dataframe(sub)
-
-        if st.button("Simular renovação"):
-            next_date = str(datetime.date.today() + datetime.timedelta(days=30))
-            c.execute("INSERT INTO subscriptions (user_id, status, plan, renew_date) VALUES (?, 'active', ?, ?)",
-                      (user_id, plan, next_date))
-            conn.commit()
-            st.success("Atualizado")
-
-    # =========================
-    # ADMIN
-    # =========================
-    elif menu == "Admin":
-        st.title("👨‍💼 Admin")
-
-        users = pd.read_sql_query("SELECT id, email, plan FROM users", conn)
-        st.dataframe(users)
-
-        subs = pd.read_sql_query("SELECT * FROM subscriptions", conn)
-        st.dataframe(subs)
-
-        revenue = len(subs) * 49
-        st.metric("MRR (R$)", revenue)
+            st.success("Talhão salvo!")
 
 # =========================
-# FOOTER
+# NDVI + IA
 # =========================
-st.markdown("---")
-st.caption("Agro SaaS Enterprise • Plataforma SaaS 🚀")
+if menu == "NDVI":
+    arquivo = st.file_uploader("Upload TIF", type=["tif"])
+
+    if arquivo:
+        with rasterio.open(arquivo) as src:
+            img = src.read()
+
+        nir = img[3].astype(float)
+        red = img[2].astype(float)
+
+        ndvi = (nir - red) / (nir + red + 0.01)
+
+        st.image(ndvi, caption="NDVI")
+
+        taxa = np.vectorize(gerar_taxa)(ndvi)
+
+        st.image(taxa, caption="Taxa Variável")
+
+        st.session_state["taxa"] = taxa
+
+# =========================
+# EXPORTAR
+# =========================
+if menu == "Exportar":
+
+    if "user_id" not in st.session_state:
+        st.warning("Faça login")
+    else:
+        c.execute("SELECT geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+        dados = c.fetchall()
+
+        if dados:
+            geojson = eval(dados[-1][0])
+            geom = shape(geojson["geometry"])
+
+            gdf = gpd.GeoDataFrame({
+                "taxa": [120]
+            }, geometry=[geom], crs="EPSG:4326")
+
+            tmp = tempfile.mkdtemp()
+            shp = os.path.join(tmp, "mapa.shp")
+            gdf.to_file(shp)
+
+            # ISOXML
+            xml_path = os.path.join(tmp, "taskdata.xml")
+            with open(xml_path, "w") as f:
+                f.write("<ISO11783_TaskData></ISO11783_TaskData>")
+
+            zip_path = os.path.join(tmp, "export.zip")
+            with zipfile.ZipFile(zip_path, 'w') as z:
+                for file in os.listdir(tmp):
+                    z.write(os.path.join(tmp, file), file)
+
+            with open(zip_path, "rb") as f:
+                st.download_button("Baixar para máquina", f, file_name="mapa.zip")
+
+            st.success("Exportado!")
