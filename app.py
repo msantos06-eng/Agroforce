@@ -42,6 +42,14 @@ nome_fazenda = st.sidebar.text_input("Nome da fazenda")
               (st.session_state["user_id"], nome_fazenda))
     conn.commit()
     st.sidebar.success("Fazenda criada")
+    c.execute("""
+CREATE TABLE IF NOT EXISTS talhoes (
+    id INTEGER PRIMARY KEY,
+    usuario_id INTEGER,
+    fazenda_id INTEGER,
+    geojson TEXT
+)
+""")
 
     c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
     if c.fetchone():
@@ -50,6 +58,13 @@ nome_fazenda = st.sidebar.text_input("Nome da fazenda")
     c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
     conn.commit()
     st.success("Usuário criado!")
+
+    c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+total = c.fetchone()[0]
+
+if total >= 3:
+    st.warning("Plano Free permite apenas 3 talhão")
+    st.stop()
 
 # =========================
 # FUNÇÕES
@@ -246,6 +261,22 @@ menu = st.sidebar.radio("Menu", [
         })
 
         st.line_chart(df.set_index("Dia"))
+        c.execute("""
+CREATE TABLE IF NOT EXISTS ndvi_historico (
+    id INTEGER PRIMARY KEY,
+    talhao_id INTEGER,
+    valor REAL,
+    data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+    ndvi_medio = float(np.mean(ndvi))
+
+    c.execute("""
+INSERT INTO ndvi_historico (talhao_id, valor)
+VALUES (?, ?)
+""", (1, ndvi_medio))
+
+conn.commit()
 
 # =========================
 # EXPORTAR
