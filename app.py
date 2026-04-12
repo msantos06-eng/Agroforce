@@ -26,6 +26,14 @@ c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TE
 c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
 conn.commit()
 
+    c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
+if c.fetchone():
+    st.error("Usuário já existe")
+else:
+    c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
+    conn.commit()
+    st.success("Usuário criado!")
+
 # =========================
 # FUNÇÕES
 # =========================
@@ -142,21 +150,34 @@ if menu == "NDVI Satélite":
 # =========================
 # MAPA
 # =========================
-if menu == "Mapa":
-    mapa = folium.Map(location=[-12.5, -45.0], zoom_start=13)
+if map_data and map_data.get("last_active_drawing"):
+    geojson = map_data["last_active_drawing"]
 
-    Draw(export=True).add_to(mapa)
+    st.session_state["talhao"] = geojson
 
-    map_data = st_folium(mapa)
-
-    if map_data and map_data.get("last_active_drawing"):
-        geojson = map_data["last_active_drawing"]
-
-        if "user_id" in st.session_state:
-            c.execute("INSERT INTO talhoes (usuario_id, geojson) VALUES (?,?)",
-                      (st.session_state["user_id"], str(geojson)))
+    if "user_id" in st.session_state:
+        if st.button("Salvar Talhão"):
+            c.execute(
+                "INSERT INTO talhoes (usuario_id, geojson) VALUES (?, ?)",
+                (st.session_state["user_id"], str(geojson))
+            )
             conn.commit()
             st.success("Talhão salvo!")
+    if "user_id" in st.session_state:
+    c.execute("SELECT id, geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+    dados = c.fetchall()
+
+    if dados:
+        ids = [str(d[0]) for d in dados]
+        escolhido = st.selectbox("Selecione um talhão", ids)
+
+        geojson = [d[1] for d in dados if str(d[0]) == escolhido][0]
+        geojson = eval(geojson)
+
+        st.session_state["talhao"] = geojson
+
+    with st.spinner("Processando imagem de satélite..."):
+    img_bytes = buscar_ndvi_satellite(geo)
 
 # =========================
 # NDVI + IA
