@@ -22,14 +22,31 @@ st.set_page_config(layout="wide")
 conn = sqlite3.connect("database.db", check_same_thread=False)
 c = conn.cursor()
 
-c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
-conn.commit()
+    c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
+    conn.commit()
+    c.execute("""
+CREATE TABLE IF NOT EXISTS fazendas (
+    id INTEGER PRIMARY KEY,
+    usuario_id INTEGER,
+    nome TEXT
+)
+""")
+    conn.commit()
+    st.sidebar.subheader("Fazendas")
+
+nome_fazenda = st.sidebar.text_input("Nome da fazenda")
+
+    if st.sidebar.button("Criar Fazenda"):
+    c.execute("INSERT INTO fazendas (usuario_id, nome) VALUES (?, ?)",
+              (st.session_state["user_id"], nome_fazenda))
+    conn.commit()
+    st.sidebar.success("Fazenda criada")
 
     c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
-if c.fetchone():
+    if c.fetchone():
     st.error("Usuário já existe")
-else:
+    else:
     c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
     conn.commit()
     st.success("Usuário criado!")
@@ -37,12 +54,12 @@ else:
 # =========================
 # FUNÇÕES
 # =========================
-def hash_senha(s):
+    def hash_senha(s):
          return
          hashlib.sha256(s.encode()).hexdigest()
 
 
-def gerar_taxa(ndvi):
+    def gerar_taxa(ndvi):
     if ndvi < 0.3:
         return 150
     elif ndvi < 0.6:
@@ -51,7 +68,7 @@ def gerar_taxa(ndvi):
         return 80
 
 
-def get_token():
+    def get_token():
     url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 
     data = {
@@ -64,7 +81,7 @@ def get_token():
     return r.json()["access_token"]
 
 
-def buscar_ndvi_satellite(geojson):
+    def buscar_ndvi_satellite(geojson):
     token = get_token()
 
     url = "https://sh.dataspace.copernicus.eu/api/v1/process"
@@ -101,9 +118,9 @@ def buscar_ndvi_satellite(geojson):
 st.sidebar.title("Login")
 
 email = st.sidebar.text_input("Email")
-senha = st.sidebar.text_input("Senha", type="password")
+senha = st.sidebar.text_input("Senha",                type="password")
 
-if st.sidebar.button("Entrar"):
+    if st.sidebar.button("Entrar"):
     senha_hash = hash_senha(senha)
     c.execute("SELECT * FROM usuarios WHERE email=? AND senha=?", (email, senha_hash))
     user = c.fetchone()
@@ -114,7 +131,7 @@ if st.sidebar.button("Entrar"):
     else:
         st.error("Erro login")
 
-if st.sidebar.button("Cadastrar"):
+    if st.sidebar.button("Cadastrar"):
     senha_hash = hash_senha(senha)
     c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
     conn.commit()
@@ -124,12 +141,13 @@ if st.sidebar.button("Cadastrar"):
 # MENU
 # =========================
 menu = st.sidebar.radio("Menu", [
+    "dashboard"
     "Mapa",
     "NDVI",
     "NDVI Satélite",
     "Exportar"
 ])
-if menu == "NDVI Satélite":
+    if menu == "NDVI Satélite":
 
     if "talhao" not in st.session_state:
         st.warning("Desenhe um talhão primeiro")
@@ -150,7 +168,7 @@ if menu == "NDVI Satélite":
 # =========================
 # MAPA
 # =========================
-if map_data and map_data.get("last_active_drawing"):
+    if map_data and map_data.get("last_active_drawing"):
     geojson = map_data["last_active_drawing"]
 
     st.session_state["talhao"] = geojson
@@ -182,7 +200,7 @@ if map_data and map_data.get("last_active_drawing"):
 # =========================
 # NDVI + IA
 # =========================
-if menu == "NDVI":
+     if menu == "NDVI":
     arquivo = st.file_uploader("Upload TIF", type=["tif"])
 
     if arquivo:
@@ -201,11 +219,38 @@ if menu == "NDVI":
         st.image(taxa, caption="Taxa Variável")
 
         st.session_state["taxa"] = taxa
+        if menu == "Dashboard":
+
+    st.title("📊 Dashboard Agrícola")
+
+    if "user_id" not in st.session_state:
+        st.warning("Faça login")
+    else:
+        c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+        total_talhoes = c.fetchone()[0]
+
+        st.metric("🌾 Total de Talhões", total_talhoes)
+
+        # Simulação de NDVI médio (depois podemos salvar real)
+        import random
+        ndvi_medio = round(random.uniform(0.3, 0.8), 2)
+
+        st.metric("🌱 NDVI Médio", ndvi_medio)
+
+        # Gráfico fake (depois vamos deixar real)
+        import pandas as pd
+
+        df = pd.DataFrame({
+            "Dia": ["Seg", "Ter", "Qua", "Qui", "Sex"],
+            "NDVI": [0.4, 0.5, 0.45, 0.6, 0.7]
+        })
+
+        st.line_chart(df.set_index("Dia"))
 
 # =========================
 # EXPORTAR
 # =========================
-if menu == "Exportar":
+    if menu == "Exportar":
 
     if "user_id" not in st.session_state:
         st.warning("Faça login")
