@@ -24,24 +24,24 @@ c = conn.cursor()
 
 c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
 c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
-    conn.commit()
-    c.execute("""
+conn.commit()
+c.execute("""
 CREATE TABLE IF NOT EXISTS fazendas (
     id INTEGER PRIMARY KEY,
     usuario_id INTEGER,
     nome TEXT
 )
 """)
-    conn.commit()
-    st.sidebar.subheader("Fazendas")
+conn.commit()
+st.sidebar.subheader("Fazendas")
 
 nome_fazenda = st.sidebar.text_input("Nome da fazenda")
 
     if st.sidebar.button("Criar Fazenda"):
 c.execute("INSERT INTO fazendas (usuario_id, nome) VALUES (?, ?)",
               (st.session_state["user_id"], nome_fazenda))
-    conn.commit()
-    st.sidebar.success("Fazenda criada")
+conn.commit()
+st.sidebar.success("Fazenda criada")
 c.execute("""
 CREATE TABLE IF NOT EXISTS talhoes (
     id INTEGER PRIMARY KEY,
@@ -55,8 +55,8 @@ c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
     if c.fetchone():
     st.error("Usuário já existe")
     else:
-    c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
-    conn.commit()
+c.execute("INSERT INTO usuarios (email, senha) VALUES (?,?)", (email, senha_hash))
+conn.commit()
     st.success("Usuário criado!")
 
 c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
