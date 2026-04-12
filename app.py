@@ -22,7 +22,7 @@ st.set_page_config(layout="wide")
 conn = sqlite3.connect("database.db", check_same_thread=False)
 c = conn.cursor()
 
-    c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, email TEXT, senha TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS talhoes (id INTEGER PRIMARY KEY, usuario_id INTEGER, geojson TEXT)")
     conn.commit()
     c.execute("""
@@ -42,7 +42,7 @@ nome_fazenda = st.sidebar.text_input("Nome da fazenda")
               (st.session_state["user_id"], nome_fazenda))
     conn.commit()
     st.sidebar.success("Fazenda criada")
-    c.execute("""
+c.execute("""
 CREATE TABLE IF NOT EXISTS talhoes (
     id INTEGER PRIMARY KEY,
     usuario_id INTEGER,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS talhoes (
 )
 """)
 
-    c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
+c.execute("SELECT * FROM usuarios WHERE email=?", (email,))
     if c.fetchone():
     st.error("Usuário já existe")
     else:
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS talhoes (
     conn.commit()
     st.success("Usuário criado!")
 
-    c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
 total = c.fetchone()[0]
 
 if total >= 3:
@@ -197,7 +197,7 @@ menu = st.sidebar.radio("Menu", [
             conn.commit()
             st.success("Talhão salvo!")
     if "user_id" in st.session_state:
-    c.execute("SELECT id, geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+c.execute("SELECT id, geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
     dados = c.fetchall()
 
     if dados:
@@ -241,7 +241,7 @@ menu = st.sidebar.radio("Menu", [
     if "user_id" not in st.session_state:
         st.warning("Faça login")
     else:
-        c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+c.execute("SELECT COUNT(*) FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
         total_talhoes = c.fetchone()[0]
 
         st.metric("🌾 Total de Talhões", total_talhoes)
@@ -260,8 +260,7 @@ menu = st.sidebar.radio("Menu", [
             "NDVI": [0.4, 0.5, 0.45, 0.6, 0.7]
         })
 
-        st.line_chart(df.set_index("Dia"))
-        c.execute("""
+        st.line_chart(df.set_index("Dia")) c.execute("""
 CREATE TABLE IF NOT EXISTS ndvi_historico (
     id INTEGER PRIMARY KEY,
     talhao_id INTEGER,
@@ -271,7 +270,7 @@ CREATE TABLE IF NOT EXISTS ndvi_historico (
 """)
     ndvi_medio = float(np.mean(ndvi))
 
-    c.execute("""
+c.execute("""
 INSERT INTO ndvi_historico (talhao_id, valor)
 VALUES (?, ?)
 """, (1, ndvi_medio))
@@ -286,7 +285,7 @@ conn.commit()
     if "user_id" not in st.session_state:
         st.warning("Faça login")
     else:
-        c.execute("SELECT geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
+      c.execute("SELECT geojson FROM talhoes WHERE usuario_id=?", (st.session_state["user_id"],))
         dados = c.fetchall()
 
         if dados:
