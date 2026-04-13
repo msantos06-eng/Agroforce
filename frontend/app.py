@@ -1,368 +1,163 @@
 import streamlit as st
-import requests
-import folium
-from streamlit_folium import st_folium
-import streamlit as st
-import requests
-import folium
-from streamlit_folium import st_folium
-from fastapi import FastAPI
-from db import SessionLocal
-from models import User
-from auth import verify_password, create_token
-
-app = FastAPI()
-
-@app.post("/login")
-def login(email: str, password: str):
-
-    db = SessionLocal()
-
-    user = db.query(User).filter(User.email == email).first()
-
-    if not user:
-        return {"error": "user not found"}
-
-    if not verify_password(password, user.password):
-        return {"error": "invalid password"}
-
-    token = create_token({
-        "user_id": user.id,
-        "email": user.email
-    })
-
-    return {"access_token": token}
-    @app.get("/farms")
-def get_farms(user_id: int):
-
-    db = SessionLocal()
-
-    farms = db.query(Farm).filter(Farm.user_id == user_id).all()
-
-    return [
-        {
-            "id": f.id,
-            "name": f.name
-        }
-        for f in farms
-    ]
-
-API = "https://SEU-BACKEND.onrender.com"
-
-st.title("🌾 Agro SaaS Enterprise")
-
-# 🔐 LOGIN
-email = st.text_input("Email")
-password = st.text_input("Senha", type="password")
-
-if st.button("Login"):
-
-    res = requests.post(f"{API}/login", params={
-        "email": email,
-        "password": password
-    }).json()
-
-    if "access_token" in res:
-        st.session_state["token"] = res["access_token"]
-        st.success("Logado com sucesso!")
-
-# 📊 DASHBOARD
-if "token" in st.session_state:
-
-    token = st.session_state["token"]
-
-    user_id = 1  # (depois vem do JWT decode)
-
-    farms = requests.get(
-        f"{API}/farms?user_id={user_id}"
-    ).json()
-
-    st.subheader("🌾 Suas Fazendas")
-
-    for f in farms:
-        st.write(f"• {f['name']}") 
-
-API = "https://SEU-BACKEND.onrender.com"
-
-st.title("🌾 Agro SaaS - NDVI Platform")
-
-# ======================
-# 🔐 LOGIN / CADASTRO
-# ======================
-menu = st.sidebar.selectbox("Menu", ["Login", "Cadastro"])
-
-email = st.sidebar.text_input("Email")
-password = st.sidebar.text_input("Senha", type="password")
-
-if menu == "Cadastro":
-
-    if st.sidebar.button("Criar conta"):
-
-        r = requests.post(f"{API}/register", params={
-            "email": email,
-            "password": password
-        })
-
-        st.success("Conta criada!")
-
-if menu == "Login":
-
-    if st.sidebar.button("Entrar"):
-
-        r = requests.post(f"{API}/login", params={
-            "email": email,
-            "password": password
-        }).json()
-
-        if "plan" in r:
-            st.session_state["user"] = r
-            st.success(f"Logado! Plano: {r['plan']}")
-
-API = "https://SEU-BACKEND.onrender.com"
-
-st.title("🌾 Agro SaaS")
-
-email = st.text_input("Email")
-
-if st.button("🚀 Assinar PRO (R$49/mês)"):
-
-    res = requests.post(f"{API}/create-checkout-session", params={
-        "email": email
-    }).json()
-
-    st.markdown(f"[Clique para pagar]({res['url']})")
-    if user["plan"] == "free":
-    st.warning("Plano gratuito: limite de NDVI")
-else:
-    st.success("Plano PRO ativo")
-        else:
-            st.error("Erro login")
-            @app.post("/reset-password")
-def reset_password(email: str):
-
-    # versão simples (produção usa email real)
-    return {"msg": f"link enviado para {email}"} 
-
-# ======================
-# 🌾 SAAS APP
-# ======================
-if "user" in st.session_state:
-
-    user = st.session_state["user"]
-
-    farm_id = st.number_input("ID Fazenda", value=1)
-
-    if st.button("Rodar NDVI Sentinel"):
-
-        # 🔒 LIMITAÇÃO FREE
-        if user["plan"] == "free":
-            st.warning("Plano free: limite básico aplicado")
-
-        res = requests.get(f"{API}/farm-ndvi/{farm_id}").json()
-
-        st.metric("NDVI médio", res["mean_ndvi"])
-        st.success(res["status"])
-
-    # 🗺️ MAPA
-    m = folium.Map(location=[-12.5, -45], zoom_start=6)
-    st_folium(m, width=900, height=600)
-
-else:
-    st.warning("Faça login para acessar o sistema")
-
-API = "https://SEU-BACKEND.onrender.com"
-
-st.set_page_config(page_title="Agro SaaS Map", layout="wide")
-
-st.title("🌍 Agro SaaS Map")
-
-# 📡 buscar dados do backend
-data = requests.get(f"{API}/farms").json()
-
-# 🗺️ mapa base
-m = folium.Map(location=[-12.5, -45], zoom_start=6)
-
-# 🌍 desenhar GeoJSON do PostGIS
-folium.GeoJson(data).add_to(m)
-
-# 📍 render no Streamlit
-st_folium(m, width=900, height=600)
-
-st.title("🌾 Desenhar Fazenda")
-
-# 🗺️ mapa base
-m = folium.Map(location=[-12.5, -45], zoom_start=6)
-
-# 🖊️ ferramenta de desenho
-from folium.plugins import Draw
-
-Draw(
-    export=True,
-    filename="farm.geojson",
-    draw_options={
-        "polygon": True,
-        "rectangle": True,
-        "circle": False,
-        "marker": False
-    }
-).add_to(m)
-
-output = st_folium(m, height=600, width=900)
-
-# 📡 capturar desenho
-if output and output.get("last_active_drawing"):
-
-    geojson = output["last_active_drawing"]
-
-    st.success("Fazenda desenhada!")
-
-    st.json(geojson)
-
-    # enviar para backend
-    import requests
-
-    API = "https://SEU-BACKEND.onrender.com"
-
-    requests.post(f"{API}/farms", json=geojson)
-    import streamlit as st
-import requests
-import folium
-from streamlit_folium import st_folium
-
-API = "https://SEU-BACKEND.onrender.com"
-
-st.title("🌾 Agro SaaS - NDVI + Área")
-
-data = requests.get(f"{API}/farms").json()
-
-m = folium.Map(location=[-12.5, -45], zoom_start=6)
-
-for f in data["features"]:
-
-    props = f["properties"]
-
-    folium.GeoJson(
-        f,
-        tooltip=f"{props['name']} - {props['hectares']:.2f} ha"
-    ).add_to(m)
-
-st_folium(m, width=900, height=600) 
-
-from fastapi import FastAPI
-from sentinel import get_token
-from ndvi_sentinel import get_ndvi
-from analysis import compute_ndvi_mean
-from db import SessionLocal
-from models import Farm
-
 import numpy as np
-
-app = FastAPI()
-
-@app.get("/farm-ndvi/{farm_id}")
-def farm_ndvi(farm_id: int):
-
-    db = SessionLocal()
-
-    farm = db.query(Farm).filter(Farm.id == farm_id).first()
-
-    # 🔴 bbox simplificado (produção usa geom real)
-    bbox = [[-46,-12], [-45,-12], [-45,-13], [-46,-13], [-46,-12]]
-
-    token = "SENTINEL_TOKEN"
-
-    ndvi_raw = get_ndvi(token, bbox)
-
-    # simulação decode raster (produção usa rasterio)
-    ndvi_array = np.random.rand(100,100)
-
-    mean_ndvi = compute_ndvi_mean(ndvi_array)
-
-    if mean_ndvi < 0.3:
-        status = "Estresse crítico"
-    elif mean_ndvi < 0.6:
-        status = "Médio vigor"
-    else:
-        status = "Saudável"
-
-    return {
-        "farm_id": farm_id,
-        "mean_ndvi": mean_ndvi,
-        "status": status
-    }
-    from fastapi import FastAPI
-from db import SessionLocal
-from models import NDVIHistory
-
-app = FastAPI()
-
-@app.post("/ndvi/save")
-def save_ndvi(farm_id: int, season: str, mean_ndvi: float):
-
-    db = SessionLocal()
-
-    record = NDVIHistory(
-        farm_id=farm_id,
-        season=season,
-        mean_ndvi=mean_ndvi
-    )
-
-    db.add(record)
-    db.commit()
-    db.close()
-
-    return {"status": "saved"}
-    import streamlit as st
 import requests
-import pandas as pd
-import plotly.express as px
+from PIL import Image
 
-API = "https://SEU-BACKEND.onrender.com"
+from ndvi import calculate_ndvi
+from vra import generate_vra_map, export_vra_csv
+from sentinel import get_token, search_sentinel
+from ndvi_map import create_ndvi_colored_map
+from streamlit_folium import st_folium
 
-st.title("🌾 Dashboard NDVI Empresarial")
+try:
+    from ai_agro import analyze_sentinel_ndvi
+except ImportError:
+    analyze_sentinel_ndvi = None
 
-farm_id = st.number_input("ID Fazenda", value=1)
+st.set_page_config(page_title="NDVI SaaS v2", layout="wide")
+
+API_URL = "http://localhost:3000/python-api"
+
+st.title("🌱 Agro SaaS Pro")
 
 # =========================
-# 📊 HISTÓRICO NDVI
+# NDVI RÁPIDO
 # =========================
-if st.button("Carregar Histórico NDVI"):
+if st.button("Rodar NDVI"):
+    try:
+        res = requests.get(f"{API_URL}/ndvi")
+        data = res.json()
+        st.success(data["status"])
+        st.info(data["recommendation"])
+        st.metric("NDVI médio", data["mean_ndvi"])
+    except Exception as e:
+        st.error(f"Erro API: {e}")
 
-    data = requests.get(
-        f"{API}/ndvi/history/{farm_id}"
-    ).json()
+# =========================
+# NDVI VIA BACKEND
+# =========================
+if st.button("Rodar NDVI (Backend)"):
+    try:
+        response = requests.get(f"{API_URL}/ndvi")
+        data = response.json()
+        st.success(data["status"])
+        st.info(data["recommendation"])
+    except Exception as e:
+        st.error(f"Erro: {e}")
 
-    df = pd.DataFrame(data)
+# =========================
+# TABS
+# =========================
+tab1, tab2, tab3 = st.tabs(["📷 Upload NDVI", "🛰️ Sentinel + IA", "📋 Registros"])
 
-    st.subheader("📊 Evolução NDVI por Safra")
-
-    fig = px.line(
-        df,
-        x="season",
-        y="mean_ndvi",
-        markers=True,
-        title="NDVI por Safra"
+# =========================================================
+# TAB 1 -- Upload NDVI
+# =========================================================
+with tab1:
+    uploaded_file = st.file_uploader(
+        "Upload imagem (drone ou satélite)",
+        type=["png", "jpg", "jpeg"]
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    if uploaded_file:
+        image = Image.open(uploaded_file)
 
-# =========================
-# 🌱 RESUMO EXECUTIVO
-# =========================
-if st.button("Resumo Executivo"):
+        st.subheader("Imagem Original")
+        st.image(image, use_container_width=True)
 
-    data = requests.get(
-        f"{API}/ndvi/history/{farm_id}"
-    ).json()
+        ndvi = calculate_ndvi(np.random.rand(10, 10), np.random.rand(10, 10))
 
-    df = pd.DataFrame(data)
+        st.subheader("🌿 NDVI")
+        st.image(ndvi, use_container_width=True)
 
-    st.metric("NDVI atual", df["mean_ndvi"].iloc[-1])
-    st.metric("Safras analisadas", len(df))
+        ndvi_map = create_ndvi_colored_map(ndvi)
+        st_folium(ndvi_map, width=900, height=500)
 
-    if df["mean_ndvi"].iloc[-1] < 0.3:
-        st.error("Estresse crítico na lavoura")
-    elif df["mean_ndvi"].iloc[-1] < 0.6:
-        st.warning("Vigor médio")
-    else:
-        st.success("Lavoura saudável")
+        zones = generate_vra_map(ndvi)
+        df = export_vra_csv(zones)
+
+        st.subheader("📦 VRA")
+        st.dataframe(df)
+
+# =========================================================
+# TAB 2 -- Sentinel + IA
+# =========================================================
+with tab2:
+    st.header("🛰️ NDVI Satélite + IA")
+
+    if st.button("Buscar Sentinel + IA"):
+        try:
+            client_id = st.secrets["sh-c0dac085-be43-4a1a-846b-9f2007c39719"]
+            client_secret = st.secrets["mquL3Z5gSzNGH8Dq4eAynUuczrC7P5UE"]
+
+            token = get_token(client_id, client_secret)
+            st.success("Conectado ao Sentinel!")
+
+            bbox = "POLYGON((-46 -12, -46 -13, -45 -13, -45 -12, -46 -12))"
+            data = search_sentinel(token, bbox, "2024-01-01", "2024-01-10")
+            st.json(data)
+
+            ndvi_fake = np.random.rand(20, 20)
+
+            if analyze_sentinel_ndvi:
+                result = analyze_sentinel_ndvi(ndvi_fake, 0.6, 27)
+                st.success(result["status"])
+                st.info(result["recommendation"])
+            else:
+                st.warning("IA não disponível")
+
+        except Exception as e:
+            st.error(f"Erro: {str(e)}")
+
+    st.subheader("🧠 IA Agrícola")
+
+    rainfall = 0.6
+    temp = 27
+
+    if st.button("Rodar IA Agrícola") and analyze_sentinel_ndvi:
+        result = analyze_sentinel_ndvi(np.random.rand(10, 10), rainfall, temp)
+        st.success(result["status"])
+        st.info(result["recommendation"])
+
+# =========================================================
+# TAB 3 -- Registros (API local)
+# =========================================================
+with tab3:
+    st.header("📋 Registros")
+
+    if st.button("Carregar registros"):
+        resp = requests.get(f"{API_URL}/registros")
+        if resp.status_code == 200:
+            dados = resp.json()
+            if dados:
+                st.dataframe(dados)
+            else:
+                st.info("Nenhum registro encontrado.")
+        else:
+            st.error("Erro ao buscar registros")
+
+    st.subheader("Criar registro")
+    with st.form("form_criar"):
+        nome = st.text_input("Nome")
+        descricao = st.text_area("Descrição")
+        enviado = st.form_submit_button("Salvar")
+
+    if enviado:
+        resp = requests.post(f"{API_URL}/registros", json={
+            "nome": nome,
+            "descricao": descricao
+        })
+        if resp.status_code == 201:
+            st.success("Registro criado!")
+            st.json(resp.json())
+        else:
+            st.error(f"Erro: {resp.json().get('detail', 'Erro desconhecido')}")
+
+    st.subheader("Deletar registro")
+    id_deletar = st.number_input("ID para deletar", min_value=1, step=1)
+    if st.button("Deletar"):
+        resp = requests.delete(f"{API_URL}/registros/{int(id_deletar)}")
+        if resp.status_code == 200:
+            st.success(resp.json()["message"])
+        else:
+            st.error("Registro não encontrado")
