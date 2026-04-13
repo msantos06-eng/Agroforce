@@ -19,3 +19,19 @@ def generate_map(ndvi):
     ).add_to(m)
 
     return m
+    @app.get("/ndvi/history/{farm_id}")
+def get_history(farm_id: int):
+
+    db = SessionLocal()
+
+    data = db.query(NDVIHistory).filter(
+        NDVIHistory.farm_id == farm_id
+    ).all()
+
+    return [
+        {
+            "season": d.season,
+            "mean_ndvi": d.mean_ndvi
+        }
+        for d in data
+    ]
